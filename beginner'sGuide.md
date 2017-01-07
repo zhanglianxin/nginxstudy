@@ -54,7 +54,7 @@ ps -ax | grep nginx
 
 ## 配置文件的结构
 
-nginx 由模块组成，通过配置文件中特定的指令控制。指定被分成简单指令和块指令。简单指令由被空格分开并以分号结尾的名字和参数组成。块指令和简单指令有着相同的结构，但不是以分号结尾而是一组被花括号包围的附加指令。如果块指令花括号内可以有其它指令，被叫做上下文（例如：[events](http://nginx.org/en/docs/ngx_core_module.html#events) [http](http://nginx.org/en/docs/http/ngx_http_core_module.html#http) [server](http://nginx.org/en/docs/http/ngx_http_core_module.html#server) [location](http://nginx.org/en/docs/http/ngx_http_core_module.html#location)）。
+nginx 由模块组成，通过配置文件中特定的指令控制。指定被分成简单指令和块指令。简单指令由被空格分开并以分号结尾的名称和参数组成。块指令和简单指令有着相同的结构，但不是以分号结尾而是一组被花括号包围的附加指令。如果块指令花括号内可以有其它指令，被叫做上下文（例如：[events](http://nginx.org/en/docs/ngx_core_module.html#events) [http](http://nginx.org/en/docs/http/ngx_http_core_module.html#http) [server](http://nginx.org/en/docs/http/ngx_http_core_module.html#server) [location](http://nginx.org/en/docs/http/ngx_http_core_module.html#location)）。
 
 位于配置文件中所有上下文之外的指令被当作是 [主上下文](http://nginx.org/en/docs/ngx_core_module.html)。`events` 和 `http` 指令存在于 `main` 上下文， `server` 在 `http` 中， `location` 在 `server` 中。
 
@@ -75,4 +75,92 @@ http {
 }
 ```
 
-通常，这些配置文件可能包含几个 `server` 块，以它们 [监听](http://nginx.org/en/docs/http/ngx_http_core_module.html#listen) 的端口和 [服务名字](http://nginx.org/en/docs/http/server_names.html) 区分开。
+通常，这些配置文件可能包含几个 `server` 块，以它们 [监听](http://nginx.org/en/docs/http/ngx_http_core_module.html#listen) 的端口和 [服务名称](http://nginx.org/en/docs/http/server_names.html) 区分开。一旦 nginx 决定使用哪一个 `server` 处理请求，它会基于定义在 `server` 块里的 `location` 指令的参数检查请求头中指定的 URI 。
+
+添加下列 `location` 块到 `server` 块中：
+
+```conf
+location / {
+    root /data/www;
+}
+```
+
+这个 `location` 块指定了相对来自于请求 URI 的 `/`  前缀。为了匹配请求， URI 会被添加到 [`root`](http://nginx.org/en/docs/http/ngx_http_core_module.html#root) 指令指定的路径（也就是 `/data/www` ）后面，来组成对于请求文件的本地文件系统的路径。如果有几个 `locatino` 块匹配， nginx 选择带有最长前缀的那一个。上面的 `location` 块给出了最短前缀，长度是 1 ，因此只有在其它所有 `location` 都匹配失败的情况下，这个块才会被使用。
+
+接下来，添加第二个 `location` 块：
+
+```conf
+location /images/ {
+    root /data;
+}
+```
+
+它会匹配以 `/images` 开始的请求（ `location /` 也匹配类的请求，但是有着较短的前缀）。
+
+`server` 块的最终配置应该类似于这样：
+
+```bash
+server {
+    location / {
+        root /data/www;
+    }
+    location /images/ {
+        root /data;
+    }
+}
+```
+
+已经有一个可以工作的服务器配置，监听标准的 80 端口，可在本地机器上通过 `http://localhost/` 访问。作为以 `/images/` 开头的 URI 的请求的响应，服务器会发送来自 `/data/images` 路径下的文件。例如，响应 `http://localhost/images/example.png` 请求， nginx 会发送 `/data/images/example.png` 文件。如果这个文件不存在， nginx 会发送一个指示 404 错误的响应。 URI 不以 `/images/` 开头的请求会被映射到 `/data/www` 路径。例如，响应 `http://localhost/some/example.html` 请求， nginx 会发送 `/data/www/some/example.html` 文件。
+
+要应用新的配置，启动 nginx 如果现在还没启动，或者想 nginx 主进程发送 `reload` 信号，执行：
+
+```shell
+nginx -s reload
+```
+
+如果没有得到预期的效果，可以尝试在路径 `/usr/local/nginx/logs` 或 `/var/log/nginx` 下的 `access.log` 和 `error.log` 文件中找出原因。
+
+## 设置一个简单的代理服务器
+
+nginx 经常使用的用途之一是把它设置为一个代理服务器，也就是接收请求，传递给代理的服务器，从被代理的服务器获取响应，返回给客户端。
+
+我们将配置一个简单的代理服务器，使用本地路径的文件服务于图像请求，发送其它所有的请求给一个代理的服务器。在这个例子中，所有的服务器都被定义在一个单独的 nginx 实例上。
+
+首先，定义一个代理的服务器，使用下面的内容添加一个或多个 `server` 块到 nginx 配置文件：
+
+```conf
+server {
+    listen 8080;
+    root /data/up1;
+    
+    location / {
+    }
+}
+```
+
+这就是一个简单的服务器，它监听 8080 端口（前提是 `listen` 指令还没有被指定，由于标准的 80 端口已经被占用了），映射所有的请求到 `/data/up1` 本地文件系统路径。创建这个路径，并在里面放入 `index.html` 文件。当为服务请求而选择的 `location` 块不包括自己的 `root` 指令时，使用此 `root` 指令。
+
+接下来，使用先前的部分服务器配置，修改使它成为一个代理服务器配置。在第一个 `location` 块中，放入带协议的 [`proxy_pass`](http://nginx.org/en/docs/http/ngx_http_proxy_module.html#proxy_pass)  指令，代理的服务器名称和端口在参数中指定（在我们的案例中，是	`http://localhost:8080` ）。
+
+```conf
+server {
+    location / {
+        proxy_pass http://localhost:8080;
+    }
+    
+    location /images/ {
+        root /data;
+    }
+}
+```
+
+我们将修改第二个 `location` 块，当前是映射带有 `/images/` 前缀的请求到 `/data/images` 路径下的文件，使它匹配带有标准扩展名的图像请求。修改的 `location` 块就像这样：
+
+```conf
+location ~ \.(gif|jpg|png)$ {
+    root /data/images;
+}
+```
+
+参数是一个正则表达式，匹配所有以 `.gif` `.jpg` 或 `.png` 结尾的 URI 。正则表达式应该用 `~` 预先处理。符合的请求会被映射到 `/data/images` 路径。
+
