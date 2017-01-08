@@ -164,3 +164,46 @@ location ~ \.(gif|jpg|png)$ {
 
 参数是一个正则表达式，匹配所有以 `.gif` `.jpg` 或 `.png` 结尾的 URI 。正则表达式应该用 `~` 预先处理。符合的请求会被映射到 `/data/images` 路径。
 
+当 nginx 选择一个 `location` 块来服务于请求，它首先检查特定的 `location` 指令，记住最长前缀的 `location` ，然后检查正则表达式。如果有一条正则表达式匹配， nginx 会采用这个 `location` ，否则，就采用之前记住的那个。
+
+一个 nginx 代理服务器的配置结果就像这样：
+
+```conf
+server {
+    location / {
+        proxy_pass http://localhost:8080/;
+    }
+    
+    location ~ \.(gif|jpg|png)$ {
+        root /data/images;
+    }
+}
+```
+
+这个服务器会过滤以 `.gif` `.jpg` `.png` 结尾的请求，将它们映射到 `/data/images` 路径（通过添加 URI 到 `root` 指令的参数），传递其他所有请求到上面配置的代理的服务器。
+
+要应用新的配置，就像前面的部分描述的那样发送 `reload` 信号到 nginx 。
+
+有很多 [其他](http://nginx.org/en/docs/http/ngx_http_proxy_module.html) 指令可能会在更进一步配置代理连接的时候用到。
+
+## 设置 FastCGI 代理
+
+nginx 可以被用来路由请求到 FastCGI 服务器，这些服务器运行着由各种框架和编程语言（例如 PHP ）构建的应用。
+
+配合 FastCGI 工作的最基本的 nginx 配置包括，使用 [`fastcgi_pass`](http://nginx.org/en/docs/http/ngx_http_fastcgi_module.html#fastcgi_pass) 指令而不是 `proxy_pass` 指令，和使用 [`fastcgi_param`](http://nginx.org/en/docs/http/ngx_http_fastcgi_module.html#fastcgi_param) 指令来设置传递到 FastCGI 服务器的参数。假定 FastCGI 服务器可以通过 `localhost:9000` 访问。采用先前的代理配置部分作为基本配置，使用 `fastcgi_pass` 指令替换 `proxy_pass` 配置，把参数改成 `localhost:9000` 。在 PHP 中，`SCRIPT_FILENAME` 参数被用来判断脚本名称， `QUERY_STRING` 被用来传递请求参数。配置结果就是：
+
+```conf
+server {
+    location / {
+        fastcgi_pass localhost:9000;
+        fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
+        fastcgi_param QUERY_STRING    $query_string;
+    }
+    
+    location ~ \.(gif|jpg|png)$ {
+        root /data/images;
+    }
+}
+```
+
+这将设置一个服务器，将除静态图像的请求之外的的所有请求路由到 `localhost:9000` 通过 FastCGI 协议运行的代理服务器。
