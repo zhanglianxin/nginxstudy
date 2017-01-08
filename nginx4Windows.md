@@ -14,7 +14,7 @@ Windows 版的 nginx 使用本地 Win32 API。当前只使用 `select()` 连接�
 nginx/Windows 使用它已经运行所在的路径作为配置中的相对路径的前缀。在上面的示例中，前缀是 `C:\nginx-1.11.6\` 。配置文件中的路径必须指定为 UNIX 风格的斜杠。
 
 
-```
+```bash
 access_log    logs/site.log;
 root          C:/web/html;
 ```
@@ -22,10 +22,10 @@ root          C:/web/html;
 nginx/Windows 作为一个标准的控制台程序运行（而不是一个服务），它可以使用下面的命令来管理：
 
 ```shell
-nginx -s stop    快速关闭
-nginx -s quit    优雅关闭
-nginx -s reload  改变配置，使用新配置开始新的工作进程，优雅关闭旧的工作进程
-nginx -s reopen  重新打开日志文件
+nginx -s stop    # 快速关闭
+nginx -s quit    # 优雅关闭
+nginx -s reload  # 改变配置，使用新配置开始新的工作进程，优雅关闭旧的工作进程
+nginx -s reopen  # 重新打开日志文件
 ```
 
 ## 已知的问题
