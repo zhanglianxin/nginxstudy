@@ -23,8 +23,8 @@ nginx/Windows 作为一个标准的控制台程序运行（而不是一个服务
 
 ```shell
 nginx -s stop    # 快速关闭
-nginx -s quit    # 优雅关闭
-nginx -s reload  # 改变配置，使用新配置开始新的工作进程，优雅关闭旧的工作进程
+nginx -s quit    # 正常关闭
+nginx -s reload  # 改变配置，使用新配置开始新的工作进程，正常关闭旧的工作进程
 nginx -s reopen  # 重新打开日志文件
 ```
 
