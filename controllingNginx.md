@@ -65,3 +65,63 @@ ps axw -o pid, ppid, user, %cpu, vsz, wchan, command | egrep '(nginx|PID)'
 33136 33126 nobody   0.0  1368 kqread nginx: worker process (nginx)
 ```
 
+## 旋转日志文件
+
+为了旋转日志文件，首先需要重命名它们。之后应该发送 USR1 信号到主进程。然后主进程将重新打开所有当前打开的日志文件，并为其分配工作进程正在为所有者运行的非特权用户。成功重新打开后，主进程关闭所有打开的文件，并将消息发送到工作进程，要求它们重新打开文件。因此，旧文件几乎立即可用于后处理，例如压缩。
+
+## 联机升级可执行文件
+
+为了升级服务器可执行文件，应首先使用新的可执行文件替换旧文件。之后应该发送 USR2 信号到主进程。主进程首先将具有进程 ID 的文件重命名为具有 `.oldbin` 后缀的新文件，例如 `/usr/local/nginx/logs/nginx.pid.oldbin` ，然后启动一个新的可执行文件，启动新的工作进程：
+
+```
+  PID  PPID USER    %CPU   VSZ WCHAN  COMMAND
+33126     1 root     0.0  1164 pause  nginx: master process /usr/local/nginx/sbin/nginx
+33134 33126 nobody   0.0  1368 kqread nginx: worker process (nginx)
+33135 33126 nobody   0.0  1380 kqread nginx: worker process (nginx)
+33136 33126 nobody   0.0  1368 kqread nginx: worker process (nginx)
+33264 33126 root     0.0  1148 pause  nginx: master process /usr/local/nginx/sbin/nginx
+33265 33264 nobody   0.0  1364 kqread nginx: worker process (nginx)
+33266 33264 nobody   0.0  1364 kqread nginx: worker process (nginx)
+33267 33264 nobody   0.0  1364 kqread nginx: worker process (nginx)
+```
+
+之后，所有工作进程（旧的和新的）继续接受请求。如果 WINCH 信号被发送到第一主进程，它将向其工作进程发送消息，请求它们正常关闭，并且它们将开始退出：
+
+```
+  PID  PPID USER    %CPU   VSZ WCHAN  COMMAND
+33126     1 root     0.0  1164 pause  nginx: master process /usr/local/nginx/sbin/nginx
+33135 33126 nobody   0.0  1380 kqread nginx: worker process is shutting down (nginx)
+36264 33126 root     0.0  1148 pause  nginx: master process /usr/local/nginx/sbin/nginx
+36265 36264 nobody   0.0  1364 kqread nginx: worker process (nginx)
+36266 36264 nobody   0.0  1364 kqread nginx: worker process (nginx)
+36267 36264 nobody   0.0  1364 kqread nginx: worker process (nginx)
+```
+
+一段时间后，只有新的工作进程将处理请求：
+
+```
+  PID  PPID USER    %CPU   VSZ WCHAN  COMMAND
+33126     1 root     0.0  1164 pause  nginx: master process /usr/local/nginx/sbin/nginx
+36264 33126 root     0.0  1148 pause  nginx: master process /usr/local/nginx/sbin/nginx
+36265 36264 nobody   0.0  1364 kqread nginx: worker process (nginx)
+36266 36264 nobody   0.0  1364 kqread nginx: worker process (nginx)
+36267 36264 nobody   0.0  1364 kqread nginx: worker process (nginx)
+```
+
+应当注意，旧主进程不关闭其监听套接字，并且可以被管理以在其需要时再次开始其工作进程。如果由于某种原因新的可执行文件工作不可接受，可以执行以下操作之一：
+
+* 将 HUP 信号发送到旧的主进程。旧的工作进程将启动新的工作进程，而不重新读取配置。之后，可以通过向新的主进程发送 QUIT 信号来正常关闭所有新进程。
+* 将 TERM 信号发送到新的主进程。然后它将向其工作进程发送一条消息，请求它们立即退出，并且它们将几乎立即退出。（如果新进程由于某种原因不退出，则应向其发送 KILL 信号以强制它们退出。）当新的主进程退出时，旧的主进程将自动启动新的工作进程。
+
+如果新的主进程退出，则旧主进程从带有进程 ID 的文件名中丢弃 `.oldbin` 后缀。
+
+如果升级成功，则应向旧主进程发送 QUIT 信号，并且只有新进程将保留：
+
+```
+  PID  PPID USER    %CPU   VSZ WCHAN  COMMAND
+36264     1 root     0.0  1148 pause  nginx: master process /usr/local/nginx/sbin/nginx
+36265 36264 nobody   0.0  1364 kqread nginx: worker process (nginx)
+36266 36264 nobody   0.0  1364 kqread nginx: worker process (nginx)
+36267 36264 nobody   0.0  1364 kqread nginx: worker process (nginx)
+```
+
