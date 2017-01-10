@@ -135,5 +135,7 @@ nginx 首先搜索由字符串给出的最具体的前缀 location ，而不管�
 
 现在让我们看看如何在上面的配置中处理请求：
 
-* 请求 "`/logo.gif`" 首先由前缀 location "`/`" 匹配，然后由正则表达式 "`\.(gif|jpg|png)$`" 匹配，因此，它由后者处理。使用指令 "`root /data/www`" ，请求映射到文件 "`/data/www/logo.gif`" ，并将文件发送到客户端。
-* ​
+* 请求 "`/logo.gif`" 首先匹配前缀 location "`/`" ，然后匹配正则表达式 "`\.(gif|jpg|png)$`" ，因此，它由后者处理。使用指令 "`root /data/www`" ，请求映射到文件 "`/data/www/logo.gif`" ，并将文件发送到客户端。
+* 请求 "`/index.php`" 也匹配前缀 location "`/`" ，然后匹配正则表达式 "`\.(php)$`" ，因此，它由后者处理。请求传递到在 location:9000 上监听的 FastCGI 服务器。 [`fastcgi_param`](http://nginx.org/en/docs/http/ngx_http_fastcgi_module.html#fastcgi_param) 指令将 FastCGI 参数 `SCRIPT_FILENAME` 设置为 `/data/www/index.php` ， FastCGI 服务器执行该文件。变量 `$document_root` 等于 [`root`](http://nginx.org/en/docs/http/ngx_http_core_module.html#root) 指令的值，变量 `$fastcgi_script_name` 等于请求 URI ，即 "`/index.php`" 。
+* 请求 "`/about.html`" 仅与前缀 location "`/`" 匹配，因此，它在此 location 处理。使用指令 "`root /data/www`" 将请求映射到文件 `/data/www/about.html` ，并将文件发送到客户端。
+* 处理请求 "`/`" 更复杂。它只与前缀 location ”`/`“ 匹配，因此，它由此 location 处理。然后 [`index`](http://nginx.org/en/docs/http/ngx_http_index_module.html#index) 指令根据其参数和 `root /data/www` 指令测试 index 文件的存在。如果文件 `/data/www/index.html` 不存在，并且文件 `/data/www/index.php` 存在，那么指令会执行内部重定向到 "`/index.php`" ，并且 nginx 再次搜索 location 当客户端发送请求。如前所述，重定向的请求最终将由 FastCGI 服务器处理。
